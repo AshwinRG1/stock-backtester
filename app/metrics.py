@@ -1,52 +1,3 @@
-"""
-app/metrics.py — Performance Metrics
-======================================
-PURPOSE
--------
-This file takes a completed BacktestResult and computes/displays performance
-statistics.  It answers the core question: "Was this strategy actually good?"
-
-Raw returns alone are misleading — a strategy that returned 20% but lost 60%
-at its worst point is very different from one that returned 20% with smooth,
-steady gains.  Metrics give you the full picture.
-
-METRICS EXPLAINED
------------------
-Total Return
-    The simplest measure: how much did $1 grow (or shrink) over the period?
-    Formula: (final_value - initial_value) / initial_value
-    Limitation: ignores how bumpy the ride was.
-
-Max Drawdown
-    The largest peak-to-trough decline in portfolio value, expressed as a %.
-    If the equity curve hit $12,000 then fell to $9,000, drawdown = -25%.
-    This is the most important risk metric — it tells you the worst loss you
-    would have experienced if you entered at the peak.
-
-Sharpe Ratio
-    Risk-adjusted return: mean daily return divided by std of daily return,
-    annualised by multiplying by sqrt(252 trading days).
-    > 1.0  acceptable
-    > 2.0  good
-    > 3.0  excellent
-    Computed in the engine and passed through here for display.
-
-Win Rate
-    Percentage of completed trades that were profitable (pnl > 0).
-    Requires at least one completed round-trip trade to be meaningful.
-
-Average Trade Return
-    Mean return % across all completed trades.  Useful paired with win rate —
-    a strategy can have a low win rate but still be profitable if winners are
-    much larger than losers.
-
-HOW IT FITS IN
---------------
-    run_engine()       →  BacktestResult
-    metrics.summary()  →  printed report to terminal
-    (future) metrics.summary() can also return a dict for plotting/export
-"""
-
 import numpy as np
 import pandas as pd
 
@@ -81,6 +32,20 @@ def _avg_trade_return(trades: pd.DataFrame) -> float | None:
     return float(trades["return_pct"].mean())
 
 
+def _cagr(equity_curve: pd.Series, initial_capital: float) -> float:
+    """
+    Compound Annual Growth Rate over the full backtest period.
+
+    Derives the number of years from the DatetimeIndex span of the equity
+    curve, then solves: final = initial * (1 + cagr) ^ years  for cagr.
+    """
+    final_value = equity_curve.iloc[-1]
+    num_years = (equity_curve.index[-1] - equity_curve.index[0]).days / 365.25
+    if num_years <= 0:
+        return 0.0
+    return float((final_value / initial_capital) ** (1 / num_years) - 1)
+
+
 def summary(result: BacktestResult, initial_capital: float = 10_000.0) -> dict:
     """
     Print a formatted performance report and return metrics as a dict.
@@ -101,6 +66,7 @@ def summary(result: BacktestResult, initial_capital: float = 10_000.0) -> dict:
     mdd = _max_drawdown(result.equity_curve)
     win_rate = _win_rate(result.trades)
     avg_trade_ret = _avg_trade_return(result.trades)
+    cagr = _cagr(result.equity_curve, initial_capital)
     final_value = result.equity_curve.iloc[-1]
     dollar_pnl = final_value - initial_capital
     num_trades = len(result.trades)
@@ -129,6 +95,7 @@ def summary(result: BacktestResult, initial_capital: float = 10_000.0) -> dict:
   Dollar P&L      : ${dollar_pnl:>+10,.2f}
 
   Total Return    : {result.total_return:>+.2%}
+  Avg Annual Ret  : {cagr:>+.2%}  (CAGR)
   Max Drawdown    : {mdd:>.2%}
   Sharpe Ratio    : {result.sharpe_ratio:.4f}
 
@@ -145,12 +112,13 @@ def summary(result: BacktestResult, initial_capital: float = 10_000.0) -> dict:
         print()
 
     return {
-        "total_return":    result.total_return,
-        "max_drawdown":    round(mdd, 4),
-        "sharpe_ratio":    result.sharpe_ratio,
-        "final_value":     round(final_value, 2),
-        "dollar_pnl":      round(dollar_pnl, 2),
-        "num_trades":      num_trades,
-        "win_rate":        round(win_rate, 4) if win_rate is not None else None,
+        "total_return":     result.total_return,
+        "cagr":             round(cagr, 4),
+        "max_drawdown":     round(mdd, 4),
+        "sharpe_ratio":     result.sharpe_ratio,
+        "final_value":      round(final_value, 2),
+        "dollar_pnl":       round(dollar_pnl, 2),
+        "num_trades":       num_trades,
+        "win_rate":         round(win_rate, 4) if win_rate is not None else None,
         "avg_trade_return": round(avg_trade_ret, 4) if avg_trade_ret is not None else None,
     }

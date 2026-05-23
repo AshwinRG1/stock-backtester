@@ -1,19 +1,3 @@
-"""
-app/engine.py — Backtesting Engine
-====================================
-PURPOSE
--------
-The engine is the core of the backtesting system.  It takes price data and a
-strategy, generates signals internally, then simulates trading those signals
-against historical prices starting from an initial capital amount.
-
-HOW IT FITS IN
---------------
-    fetch_ohlcv()               →  data (OHLCV DataFrame)
-    run_engine(data, strategy)  →  BacktestResult
-    metrics.summary(result)     →  printed performance report (Stage 3)
-"""
-
 from dataclasses import dataclass
 
 import numpy as np
