@@ -67,7 +67,9 @@ def run_engine(data: pd.DataFrame, strategy, initial_capital: float = 10_000.0, 
     # Convert +1/-1/0 signals into a binary held/flat position series.
     # replace(-1, 0) makes it binary; ffill() holds the position between
     # signals; fillna(0) covers the warmup period before the first signal.
-    positions = signals.replace(-1, 0).ffill().fillna(0)
+    # Replace hold (0) with NaN so ffill() can carry the last real signal
+    # (+1 or -1) forward across hold bars. clip(0, 1) then converts -1 to 0.
+    positions = signals.replace(0, pd.NA).ffill().fillna(0).clip(0, 1)
 
     # --- daily returns -------------------------------------------------------
     # pct_change() gives the market's return each bar.
