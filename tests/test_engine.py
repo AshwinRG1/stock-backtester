@@ -102,8 +102,13 @@ def test_known_trade_pnl_and_return():
     assert trade["return_pct"] == 100.0
 
 
-def test_open_trade_not_in_log():
-    """A buy with no subsequent sell should not appear in the trade log."""
-    signals = [0] * 5 + [1] + [0] * 14
-    result = run_engine(make_ohlcv([10.0] * 20), FixedSignals(signals), INITIAL_CAPITAL)
-    assert result.trades.empty
+def test_open_trade_flushed_at_end():
+    """A buy with no subsequent sell is flushed at the last bar's Close."""
+    closes = [10.0] * 5 + [20.0] * 15   # price doubles; signal fires at bar 4 (10.0)
+    signals = [0] * 4 + [1] + [0] * 15
+    result = run_engine(make_ohlcv(closes), FixedSignals(signals), INITIAL_CAPITAL)
+    assert len(result.trades) == 1
+    trade = result.trades.iloc[0]
+    assert trade["entry_price"] == 10.0
+    assert trade["exit_price"] == 20.0
+    assert trade["return_pct"] == 100.0

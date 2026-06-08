@@ -26,11 +26,13 @@ def fetch_ohlcv(ticker: str, period: str = "1y", interval: str = "1d") -> pd.Dat
     if raw.empty:
         raise ValueError(f"No data returned for ticker '{ticker}' (period={period}, interval={interval})")
 
-    df = raw[["Open", "High", "Low", "Close", "Volume"]].copy()
+    # Flatten MultiIndex columns before selection — newer yfinance versions return
+    # a MultiIndex even for a single ticker, so string-key selection would KeyError
+    # if we try to select columns first.
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw.columns = raw.columns.get_level_values(0)
 
-    # Flatten MultiIndex columns that yfinance may produce when downloading a single ticker
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+    df = raw[["Open", "High", "Low", "Close", "Volume"]].copy()
 
     df.index = pd.to_datetime(df.index).tz_localize(None)
     df.index.name = "Date"

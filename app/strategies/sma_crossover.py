@@ -21,4 +21,10 @@ class SMACrossover(Strategy):
         # diff() == +1 means fast just crossed above slow → buy
         # diff() == -1 means fast just crossed below slow → sell
 
+        # Suppress the warmup boundary: the first slow_period bars contain NaN
+        # SMAs which pandas coerces to False (→ 0). The first valid comparison
+        # at bar slow_period-1 would diff() against that 0, producing a spurious
+        # crossover signal even when no real crossover occurred.
+        signals.iloc[: self.slow_period] = 0
+
         return signals

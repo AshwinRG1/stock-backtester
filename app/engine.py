@@ -106,6 +106,23 @@ def run_engine(data: pd.DataFrame, strategy, initial_capital: float = 10_000.0, 
             entry_date = None
             entry_price = None
 
+    # Flush any position that is still open at the end of the data window.
+    # The equity curve already captures these gains via cumprod(); omitting the
+    # trade here would cause trade-log metrics (win_rate, avg_return) to diverge
+    # from the equity curve's actual P&L.
+    if entry_date is not None:
+        exit_date = data.index[-1]
+        exit_price = data.loc[exit_date, "Close"]
+        pnl = (exit_price - entry_price) / entry_price * initial_capital
+        trades.append({
+            "entry_date":  entry_date,
+            "exit_date":   exit_date,
+            "entry_price": entry_price,
+            "exit_price":  exit_price,
+            "pnl":         round(pnl, 2),
+            "return_pct":  round((exit_price - entry_price) / entry_price * 100, 2),
+        })
+
     trades_df = pd.DataFrame(trades) if trades else pd.DataFrame(
         columns=["entry_date", "exit_date", "entry_price", "exit_price", "pnl", "return_pct"]
     )
