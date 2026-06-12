@@ -10,7 +10,7 @@ to switch — the ORM models and migrations remain identical.
 """
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -27,6 +27,31 @@ DB_URL = f"sqlite:///{DB_PATH}"
 # connection across threads (via dependency injection). Safe for
 # SQLite when each request uses its own session, which get_db() guarantees.
 engine = create_engine(DB_URL, connect_args={"check_same_thread": False})
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_connection, _record):
+    """Apply SQLite tuning PRAGMAs on every new connection.
+
+    journal_mode=WAL upgrades from the default rollback journal so that
+    readers no longer block on a writer (and vice versa). Critical for
+    multi-user concurrency — without it, every web request that touches
+    the DB serialises behind every other one. The setting is persisted
+    in the DB file itself, so it sticks after the first connection.
+
+    synchronous=NORMAL is the recommended pairing for WAL — safe against
+    application crashes, and only at risk of losing the last commit on
+    a hard power loss. ~10x faster than the default FULL.
+
+    foreign_keys=ON enforces FK constraints, which SQLite leaves off by
+    default for historical compatibility. Must be set per-connection.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
