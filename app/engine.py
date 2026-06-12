@@ -37,6 +37,37 @@ class BacktestResult:
     sharpe_ratio: float
     ticker: str = ""
 
+    def to_dict(self) -> dict:
+        """JSON-safe serialization for API responses and DB storage.
+
+        Pandas Series/DataFrame objects cannot be serialized by FastAPI's
+        Pydantic layer, so this converts them into lists of dicts with ISO
+        date strings and native Python floats.
+        """
+        equity_dates = self.equity_curve.index.strftime("%Y-%m-%d").tolist()
+        equity_values = self.equity_curve.round(2).tolist()
+
+        return {
+            "ticker": self.ticker,
+            "total_return": self.total_return,
+            "sharpe_ratio": self.sharpe_ratio,
+            "equity_curve": [
+                {"date": d, "value": v}
+                for d, v in zip(equity_dates, equity_values)
+            ],
+            "trades": [
+                {
+                    "entry_date":  row["entry_date"].strftime("%Y-%m-%d"),
+                    "exit_date":   row["exit_date"].strftime("%Y-%m-%d"),
+                    "entry_price": float(row["entry_price"]),
+                    "exit_price":  float(row["exit_price"]),
+                    "pnl":         float(row["pnl"]),
+                    "return_pct":  float(row["return_pct"]),
+                }
+                for _, row in self.trades.iterrows()
+            ],
+        }
+
 
 def run_engine(data: pd.DataFrame, strategy, initial_capital: float = 10_000.0, ticker: str = "") -> BacktestResult:
     """
