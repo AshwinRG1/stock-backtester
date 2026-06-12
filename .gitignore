@@ -223,3 +223,10 @@ __marimo__/
 # Project-specific
 DOCS.md
 report.html
+
+# Runtime data (SQLite + WAL/journal sidecars)
+data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
