@@ -4,6 +4,7 @@ from jinja2 import Template
 from plotly.subplots import make_subplots
 
 from app.engine import BacktestResult
+from app.metrics import compute_metrics
 
 _REPORT_TEMPLATE = """\
 <!DOCTYPE html>
@@ -228,27 +229,22 @@ def plot_results(
     )
 
     # ------------------------------------------------------------------
-    # Metrics — always computed from full daily data, not the resampled chart data
+    # Metrics — delegated to compute_metrics() so the HTML report table
+    # always agrees with what summary() prints to the CLI. Computed from
+    # the full daily series, not the resampled chart data.
     # ------------------------------------------------------------------
-    num_trades = len(result.trades)
-    win_rate   = float((result.trades["pnl"] > 0).mean()) if num_trades else None
-
-    num_years  = (result.equity_curve.index[-1] - result.equity_curve.index[0]).days / 365.25
-    cagr       = (result.equity_curve.iloc[-1] / initial_capital) ** (1 / num_years) - 1 if num_years > 0 else 0.0
-
-    rolling_peak_full = result.equity_curve.cummax()
-    mdd = float(((result.equity_curve - rolling_peak_full) / rolling_peak_full).min())
+    m = compute_metrics(result, initial_capital)
 
     def _pct(v: float) -> str: return f"{v:+.2%}"
     def _cls(v: float) -> str: return "pos" if v >= 0 else "neg"
 
     rows = [
-        {"label": "Total Return", "value": _pct(result.total_return), "cls": _cls(result.total_return)},
-        {"label": "CAGR",         "value": _pct(cagr),                "cls": _cls(cagr)},
-        {"label": "Sharpe Ratio", "value": f"{result.sharpe_ratio:.4f}", "cls": ""},
-        {"label": "Max Drawdown", "value": f"{mdd:.2%}",               "cls": "neg"},
-        {"label": "Num Trades",   "value": str(num_trades),             "cls": ""},
-        {"label": "Win Rate",     "value": f"{win_rate:.1%}" if win_rate is not None else "n/a", "cls": ""},
+        {"label": "Total Return", "value": _pct(m["total_return"]),        "cls": _cls(m["total_return"])},
+        {"label": "CAGR",         "value": _pct(m["cagr"]),                "cls": _cls(m["cagr"])},
+        {"label": "Sharpe Ratio", "value": f"{m['sharpe_ratio']:.4f}",     "cls": ""},
+        {"label": "Max Drawdown", "value": f"{m['max_drawdown']:.2%}",     "cls": "neg"},
+        {"label": "Num Trades",   "value": str(m["num_trades"]),           "cls": ""},
+        {"label": "Win Rate",     "value": f"{m['win_rate']:.1%}" if m["win_rate"] is not None else "n/a", "cls": ""},
     ]
 
     return Template(_REPORT_TEMPLATE).render(
