@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "httpx2>=0.20",  # required by starlette.testclient.TestClient
 ]
 
 [tool.pytest.ini_options]
