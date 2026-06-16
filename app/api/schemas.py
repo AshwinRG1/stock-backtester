@@ -114,3 +114,27 @@ class RunSummary(BaseModel):
     total_return:  float
     sharpe_ratio:  float
     num_trades:    int
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — natural-language agent
+# ---------------------------------------------------------------------------
+class AgentRequest(BaseModel):
+    """POST /api/agent body."""
+    prompt: str = Field(
+        ..., min_length=1, max_length=2000,
+        description=(
+            "Plain-English description of the backtest to run, e.g. "
+            "'Backtest a 50/200 SMA crossover on AAPL for the past 10 years'."
+        ),
+    )
+
+
+class AgentResponse(BaseModel):
+    """POST /api/agent response — Claude's summary plus the full result.
+
+    The result field reuses BacktestResponse so the same client code can
+    handle both /api/backtest and /api/agent payloads.
+    """
+    summary: str
+    result:  BacktestResponse
