@@ -38,31 +38,23 @@ def list_strategies() -> list[str]:
     return sorted(STRATEGY_REGISTRY.keys())
 
 
-@router.post(
-    "/backtest",
-    response_model=BacktestResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_backtest(
-    req: BacktestRequest,
-    db: Session = Depends(get_db),
-) -> BacktestRun:
-    """Run a backtest, persist the result, return the full payload.
+def run_and_persist(req: BacktestRequest, db: Session) -> BacktestRun:
+    """Run a backtest and persist the row. Shared by POST /backtest and the
+    Phase 5 agent runner.
 
-    The strategy_name field is already validated by the request schema;
-    here we only have to handle the runtime failure modes: bad ticker
-    (no data), bad strategy_params (signature mismatch).
+    Raises HTTPException so the FastAPI layer can surface the error directly
+    when called from a route, and the agent runner can catch and report it
+    back to Claude as a tool-result error.
+
+    Failure modes handled here:
+      404 — yfinance returns no data (bad ticker, delisted, bad period).
+      422 — strategy_params do not match the strategy's constructor signature.
     """
-    # --- Fetch OHLCV ------------------------------------------------------
     try:
         data = fetcher.fetch_ohlcv(req.ticker, period=req.period, interval=req.interval)
     except ValueError as e:
-        # fetcher raises when yfinance returns nothing (bad ticker, delisted,
-        # invalid period/interval combo). Surface as 404 — the request was
-        # well-formed, the resource just does not exist.
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
-    # --- Build strategy instance -----------------------------------------
     strategy_cls = STRATEGY_REGISTRY[req.strategy_name]
     try:
         strategy = strategy_cls(**req.strategy_params)
@@ -72,7 +64,6 @@ def create_backtest(
             detail=f"Bad strategy_params for {req.strategy_name}: {e}",
         )
 
-    # --- Run + persist ----------------------------------------------------
     result = run_engine(data, strategy, initial_capital=req.initial_capital, ticker=req.ticker)
     metrics = compute_metrics(result, initial_capital=req.initial_capital)
     payload = result.to_dict()
@@ -97,6 +88,19 @@ def create_backtest(
     db.commit()
     db.refresh(run)  # populates id + created_at from the DB
     return run
+
+
+@router.post(
+    "/backtest",
+    response_model=BacktestResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_backtest(
+    req: BacktestRequest,
+    db: Session = Depends(get_db),
+) -> BacktestRun:
+    """Run a backtest, persist the result, return the full payload."""
+    return run_and_persist(req, db)
 
 
 @router.get("/results", response_model=list[RunSummary])
