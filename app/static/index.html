@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stock Backtester</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 1280px;
+           margin: 32px auto; padding: 0 24px; color: #1f2937; background: #fafafa; }
+    h1 { margin: 0 0 4px; font-size: 1.75rem; }
+    h2 { margin: 0 0 16px; font-size: 1.15rem; color: #1f2937; }
+    h3 { margin: 24px 0 12px; font-size: 1rem; color: #374151; }
+    .sub { color: #6b7280; font-size: 0.95rem; margin: 0 0 32px; }
+    .grid { display: grid; grid-template-columns: 380px 1fr; gap: 24px; }
+    .panel { background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+             padding: 20px; margin-bottom: 16px; }
+    label { display: block; margin: 12px 0 4px; color: #4b5563; font-size: 0.85rem;
+            font-weight: 500; }
+    input, select { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db;
+                    border-radius: 4px; font-size: 0.95rem; font-family: inherit; }
+    input:focus, select:focus { outline: 2px solid #1565c0; outline-offset: -1px;
+                                border-color: transparent; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    button { background: #1565c0; color: white; border: 0; padding: 10px 20px;
+             border-radius: 4px; font-size: 0.95rem; font-weight: 500;
+             cursor: pointer; margin-top: 16px; width: 100%; }
+    button:hover:not(:disabled) { background: #0d47a1; }
+    button:disabled { background: #9ca3af; cursor: wait; }
+    .metric-row { display: flex; justify-content: space-between; align-items: baseline;
+                  padding: 8px 0; border-bottom: 1px solid #f3f4f6; }
+    .metric-row:last-child { border-bottom: 0; }
+    .metric-label { color: #6b7280; font-size: 0.9rem; }
+    .metric-value { font-weight: 600; font-family: ui-monospace, "SF Mono", monospace;
+                    font-size: 0.95rem; }
+    .pos { color: #15803d; }
+    .neg { color: #b91c1c; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 8px; }
+    th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #f3f4f6;
+             font-family: ui-monospace, "SF Mono", monospace; }
+    th { background: #f9fafb; font-weight: 600; color: #4b5563; font-family: inherit;
+         text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    .history-item { padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 4px;
+                    margin-bottom: 6px; cursor: pointer; font-size: 0.85rem;
+                    transition: background 0.1s; }
+    .history-item:hover { background: #f3f4f6; }
+    #chart { width: 100%; height: 360px; margin: 16px 0; }
+    .error { color: #b91c1c; background: #fee2e2; padding: 10px 12px; border-radius: 4px;
+             margin-top: 12px; font-size: 0.9rem; }
+    .hidden { display: none; }
+    .placeholder { color: #9ca3af; font-size: 0.95rem; padding: 40px 0; text-align: center; }
+    .muted { color: #6b7280; font-size: 0.85rem; }
+    .footnote { color: #6b7280; font-size: 0.8rem; margin-top: 24px; line-height: 1.5; }
+    .footnote code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px;
+                     font-family: ui-monospace, "SF Mono", monospace; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>Stock Backtester</h1>
+  <p class="sub">Backtest trading strategies against historical OHLCV data. Powered by yfinance + pandas-ta.</p>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>Run a backtest</h2>
+        <form id="form">
+          <label for="ticker">Ticker</label>
+          <input type="text" id="ticker" value="AAPL" required autocomplete="off">
+
+          <label for="strategy">Strategy</label>
+          <select id="strategy" required></select>
+
+          <div class="row">
+            <div>
+              <label for="period">Period</label>
+              <select id="period">
+                <option>3mo</option>
+                <option>6mo</option>
+                <option selected>1y</option>
+                <option>2y</option>
+                <option>5y</option>
+                <option>10y</option>
+                <option>max</option>
+              </select>
+            </div>
+            <div>
+              <label for="capital">Initial Capital</label>
+              <input type="number" id="capital" value="10000" min="1" step="100" required>
+            </div>
+          </div>
+
+          <label for="params">Strategy Params <span class="muted">(optional JSON)</span></label>
+          <input type="text" id="params" placeholder='{"fast_period": 50, "slow_period": 200}' autocomplete="off">
+
+          <button type="submit" id="run-btn">Run Backtest</button>
+        </form>
+        <div id="error" class="error hidden"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Past runs</h2>
+        <div id="history"><div class="placeholder">Loading…</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>Result</h2>
+        <div id="results"><div class="placeholder">Run a backtest to see results here.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="footnote">
+    All endpoints are also exposed at <code>/docs</code> for direct API use.
+    Source: <code>github.com/AshwinRG1/stock-backtester</code>.
+  </p>
+
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script>
+    const API = "/api";
+
+    // ---------- network ----------
+    async function jget(path) {
+      const r = await fetch(API + path);
+      if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+      return r.json();
+    }
+    async function jpost(path, body) {
+      const r = await fetch(API + path, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const detail = typeof data.detail === "string" ? data.detail
+                     : Array.isArray(data.detail) ? data.detail.map(d => d.msg).join("; ")
+                     : `HTTP ${r.status}`;
+        throw new Error(detail);
+      }
+      return data;
+    }
+
+    // ---------- formatting ----------
+    const pct = (v, d=2) => (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
+    const cls = (v) => v >= 0 ? "pos" : "neg";
+    const fmtDate = (s) => new Date(s).toLocaleString();
+
+    // ---------- rendering ----------
+    function renderResult(r) {
+      const div = document.getElementById("results");
+      div.innerHTML = "";
+
+      const header = document.createElement("div");
+      const paramsStr = Object.keys(r.strategy_params).length
+        ? "(" + Object.entries(r.strategy_params).map(([k,v]) => `${k}=${v}`).join(", ") + ")"
+        : "";
+      header.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:baseline;">
+          <h3 style="margin:0; font-size:1.05rem;">${r.ticker} · ${r.strategy_name}${paramsStr}</h3>
+          <span class="muted">${r.period} · ${fmtDate(r.created_at)}</span>
+        </div>
+      `;
+      div.appendChild(header);
+
+      const metrics = document.createElement("div");
+      metrics.style.marginTop = "12px";
+      metrics.innerHTML = `
+        <div class="metric-row"><span class="metric-label">Total Return</span>
+          <span class="metric-value ${cls(r.total_return)}">${pct(r.total_return)}</span></div>
+        <div class="metric-row"><span class="metric-label">CAGR</span>
+          <span class="metric-value ${cls(r.cagr)}">${pct(r.cagr)}</span></div>
+        <div class="metric-row"><span class="metric-label">Sharpe Ratio</span>
+          <span class="metric-value">${r.sharpe_ratio.toFixed(4)}</span></div>
+        <div class="metric-row"><span class="metric-label">Max Drawdown</span>
+          <span class="metric-value neg">${pct(r.max_drawdown)}</span></div>
+        <div class="metric-row"><span class="metric-label">Win Rate</span>
+          <span class="metric-value">${r.win_rate != null ? (r.win_rate * 100).toFixed(1) + "%" : "n/a"}</span></div>
+        <div class="metric-row"><span class="metric-label">Trades</span>
+          <span class="metric-value">${r.num_trades}</span></div>
+      `;
+      div.appendChild(metrics);
+
+      const chart = document.createElement("div");
+      chart.id = "chart";
+      div.appendChild(chart);
+      const dates = r.equity_curve.map(p => p.date);
+      const values = r.equity_curve.map(p => p.value);
+      Plotly.newPlot("chart", [{
+        x: dates, y: values, type: "scatter", mode: "lines",
+        line: {color: "#1565c0", width: 2}, name: "Equity",
+        hovertemplate: "%{x}<br>$%{y:,.2f}<extra></extra>",
+      }], {
+        margin: {l: 60, r: 16, t: 16, b: 40},
+        yaxis: {title: "Portfolio Value ($)", tickformat: ",.0f"},
+        xaxis: {title: ""},
+        height: 340,
+        plot_bgcolor: "#fafafa",
+        paper_bgcolor: "white",
+      }, {displayModeBar: false, responsive: true});
+
+      if (r.trades.length) {
+        const tradesDiv = document.createElement("div");
+        tradesDiv.innerHTML = "<h3>Trades</h3>";
+        const tbl = document.createElement("table");
+        tbl.innerHTML = `
+          <thead><tr>
+            <th>Entry</th><th>Exit</th><th>Entry $</th><th>Exit $</th>
+            <th>PnL</th><th>Return</th>
+          </tr></thead>`;
+        const tbody = document.createElement("tbody");
+        for (const t of r.trades) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${t.entry_date}</td>
+            <td>${t.exit_date}</td>
+            <td>${t.entry_price.toFixed(2)}</td>
+            <td>${t.exit_price.toFixed(2)}</td>
+            <td class="${cls(t.pnl)}">${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}</td>
+            <td class="${cls(t.return_pct)}">${t.return_pct >= 0 ? "+" : ""}${t.return_pct.toFixed(2)}%</td>`;
+          tbody.appendChild(tr);
+        }
+        tbl.appendChild(tbody);
+        tradesDiv.appendChild(tbl);
+        div.appendChild(tradesDiv);
+      } else {
+        const note = document.createElement("p");
+        note.className = "muted";
+        note.style.marginTop = "16px";
+        note.textContent = "No completed trades — strategy never entered a position over this window.";
+        div.appendChild(note);
+      }
+    }
+
+    function renderHistory(runs) {
+      const div = document.getElementById("history");
+      if (!runs.length) {
+        div.innerHTML = '<div class="placeholder">No past runs yet.</div>';
+        return;
+      }
+      div.innerHTML = "";
+      for (const run of runs) {
+        const item = document.createElement("div");
+        item.className = "history-item";
+        item.innerHTML = `
+          <div style="display:flex; justify-content:space-between;">
+            <strong>${run.ticker}</strong>
+            <span class="${cls(run.total_return)}">${pct(run.total_return, 1)}</span>
+          </div>
+          <div class="muted">
+            ${run.strategy_name} · Sharpe ${run.sharpe_ratio.toFixed(2)} ·
+            ${run.num_trades}t · ${fmtDate(run.created_at)}
+          </div>`;
+        item.onclick = () => loadRun(run.id);
+        div.appendChild(item);
+      }
+    }
+
+    function showError(msg) {
+      const e = document.getElementById("error");
+      e.textContent = msg;
+      e.classList.remove("hidden");
+    }
+    function clearError() { document.getElementById("error").classList.add("hidden"); }
+
+    // ---------- actions ----------
+    async function loadStrategies() {
+      const names = await jget("/strategies");
+      const sel = document.getElementById("strategy");
+      sel.innerHTML = "";
+      for (const name of names) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        if (name === "SMACrossover") opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+    async function loadHistory() {
+      try { renderHistory(await jget("/results?limit=25")); }
+      catch (err) {
+        document.getElementById("history").innerHTML =
+          `<div class="error">Could not load history: ${err.message}</div>`;
+      }
+    }
+    async function loadRun(id) {
+      try { renderResult(await jget(`/results/${id}`)); }
+      catch (err) { showError(`Could not load run ${id}: ${err.message}`); }
+    }
+
+    document.getElementById("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearError();
+      const btn = document.getElementById("run-btn");
+      btn.disabled = true;
+      btn.textContent = "Running…";
+
+      let strategy_params = {};
+      const raw = document.getElementById("params").value.trim();
+      if (raw) {
+        try { strategy_params = JSON.parse(raw); }
+        catch { showError("Strategy params must be valid JSON."); btn.disabled = false;
+                btn.textContent = "Run Backtest"; return; }
+      }
+
+      try {
+        const result = await jpost("/backtest", {
+          ticker: document.getElementById("ticker").value.trim(),
+          strategy_name: document.getElementById("strategy").value,
+          strategy_params,
+          period: document.getElementById("period").value,
+          interval: "1d",
+          initial_capital: parseFloat(document.getElementById("capital").value),
+        });
+        renderResult(result);
+        await loadHistory();
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Run Backtest";
+      }
+    });
+
+    loadStrategies();
+    loadHistory();
+  </script>
+</body>
+</html>

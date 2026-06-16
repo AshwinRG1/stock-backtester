@@ -4,6 +4,8 @@ Run locally with:
     uvicorn app.api.main:app --reload
 
 Routes:
+    GET  /                        Webapp landing page (single-page UI).
+    GET  /static/*                Static assets (favicon, CSS, JS).
     GET  /health                  Liveness probe (no DB).
     GET  /api/strategies          List registered strategies.
     POST /api/backtest            Run + persist a backtest.
@@ -14,13 +16,19 @@ Routes:
     GET  /redoc                   Auto-generated ReDoc.
 """
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api import routes
 from app.db.database import Base, engine
+
+
+_STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 @asynccontextmanager
@@ -69,3 +77,14 @@ def health() -> dict[str, str]:
 
 
 app.include_router(routes.router, prefix="/api")
+
+
+# Webapp — single-page UI served at /. Plotly is loaded from a CDN inside the
+# HTML, so the only static asset we ship is the page itself. The /static mount
+# is there so future CSS/JS files can be added without changing routing.
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse(_STATIC_DIR / "index.html")
+
+
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
