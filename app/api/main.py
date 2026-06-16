@@ -9,11 +9,13 @@ Routes:
     POST /api/backtest            Run + persist a backtest.
     GET  /api/results             Paginated list of past runs (light).
     GET  /api/results/{run_id}    Full payload for one run.
+    POST /api/agent               Natural-language backtest via Claude.
     GET  /docs                    Auto-generated Swagger UI.
     GET  /redoc                   Auto-generated ReDoc.
 """
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,13 +25,16 @@ from app.db.database import Base, engine
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Ensure tables exist before serving the first request.
-
-    Alembic is the production source of truth — `alembic upgrade head`
-    in CI/deploy is what creates and evolves the schema. This call is a
-    no-op when the schema is current; it just lets the API come up on a
-    fresh machine where someone forgot the Alembic step.
+    """Startup setup:
+      1. Load .env so ANTHROPIC_API_KEY (and any future secrets) land in
+         os.environ for the rest of the process. Centralised here so the
+         agent module stays env-agnostic and easy to test.
+      2. Ensure tables exist. Alembic is the production source of truth
+         (`alembic upgrade head` in CI/deploy); this call is a no-op
+         against an already-migrated schema and just lets the API come up
+         on a fresh machine where someone forgot the Alembic step.
     """
+    load_dotenv()
     Base.metadata.create_all(engine)
     yield
 

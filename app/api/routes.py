@@ -16,7 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.agent.parser import MissingAPIKeyError
+from app.agent.runner import run_agent
 from app.api.schemas import (
+    AgentRequest,
+    AgentResponse,
     BacktestRequest,
     BacktestResponse,
     RunSummary,
@@ -75,3 +79,32 @@ def get_result(run_id: int, db: Session = Depends(get_db)) -> BacktestRun:
             detail=f"Backtest run {run_id} not found.",
         )
     return row
+
+
+@router.post("/agent", response_model=AgentResponse)
+def create_agent_backtest(
+    req: AgentRequest,
+    db: Session = Depends(get_db),
+) -> AgentResponse:
+    """Natural-language entry point — Claude parses the prompt, calls the
+    run_backtest tool, and returns a plain-English summary alongside the
+    full BacktestResponse.
+
+    Status codes:
+      503  ANTHROPIC_API_KEY not set (rest of the API still works).
+      404  Bad ticker — yfinance returned no data.
+      422  Bad strategy_params — strategy constructor signature mismatch.
+      200  Success.
+    """
+    try:
+        summary, run = run_agent(req.prompt, db)
+    except MissingAPIKeyError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+
+    return AgentResponse(
+        summary=summary,
+        result=BacktestResponse.model_validate(run),
+    )
