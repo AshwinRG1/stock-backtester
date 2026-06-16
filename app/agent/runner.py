@@ -27,8 +27,8 @@ from app.agent.parser import (
     SYSTEM_PROMPT,
     get_client,
 )
-from app.api.routes import run_and_persist
 from app.api.schemas import BacktestRequest
+from app.api.services import run_and_persist
 from app.db.models import BacktestRun
 
 
