@@ -1,0 +1,37 @@
+# Render deploy config — https://render.com/docs/blueprint-spec
+#
+# Render reads this file when you connect the repo and provisions the service
+# automatically. No Docker required — Render's Python runtime installs deps
+# from pyproject.toml and runs the start command.
+#
+# Free tier characteristics:
+#   - $0 forever, no payment info required.
+#   - Cold starts (~30s wake-up) after 15 min of inactivity.
+#   - Ephemeral filesystem — data/backtests.db resets on every cold start.
+#     This is fine for a portfolio demo where visitors don't expect to see
+#     each other's history; if persistence matters later, attach a paid
+#     persistent disk or switch to a managed Postgres instance.
+#
+# Anthropic API key is NOT set here on purpose — the deployed agent endpoint
+# returns 503 so public visitors can't burn through your credit. The webapp's
+# form-based UI uses /api/backtest which has no LLM cost. Add the key via
+# Render's dashboard (Environment tab) only if you want to enable the agent
+# for the public site.
+
+services:
+  - type: web
+    name: stock-backtester
+    runtime: python
+    plan: free
+    region: oregon
+
+    buildCommand: pip install .
+    startCommand: uvicorn app.api.main:app --host 0.0.0.0 --port $PORT
+
+    envVars:
+      # Pin to the same Python version we develop on (matches .venv).
+      - key: PYTHON_VERSION
+        value: 3.12.13
+
+    # /health is a no-DB liveness route — perfect for Render's health checks.
+    healthCheckPath: /health
