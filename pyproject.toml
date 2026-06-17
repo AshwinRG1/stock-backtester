@@ -18,13 +18,27 @@ dependencies = [
     "pydantic>=2.7",
     "anthropic>=0.40",
     "python-dotenv>=1.0",
+    "typer>=0.15",
+    "rich>=13.0",
 ]
+
+[project.scripts]
+backtester = "app.cli:app"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "httpx2>=0.20",  # required by starlette.testclient.TestClient
 ]
+
+[tool.setuptools.packages.find]
+# Only package the actual library — `data/` is runtime state and
+# `alembic/` is migration scripts, neither belongs in a wheel.
+include = ["app*"]
+
+[tool.setuptools.package-data]
+# Include the webapp HTML so a future wheel install ships the frontend too.
+app = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
