@@ -1,0 +1,41 @@
+name: CI
+
+# Runs on every push to main and on every pull request targeting main.
+# Goal: catch regressions before they land. No deploys, no Docker, just tests.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel any earlier runs for the same branch/PR if a newer commit lands.
+# Saves CI minutes and avoids stale "passing" badges from outdated runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          # Built-in pip cache keyed on pyproject.toml — first run installs from
+          # scratch (~1 min), subsequent runs hit the cache (~10s).
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install dependencies
+        # `.[dev]` pulls pytest + httpx2 (required by fastapi.testclient).
+        run: pip install -e ".[dev]"
+
+      - name: Run pytest
+        run: pytest -q
